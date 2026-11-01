@@ -1,0 +1,97 @@
+name: newsroom
+
+x-php: &php
+  image: newsroom-php
+  build: docker/php
+  user: "${UID:-1000}:${GID:-1000}"
+  depends_on:
+    postgres:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+
+x-php-env: &php-env
+  SERVER_NAME: ":8000"
+  HOME: /tmp
+  XDG_CONFIG_HOME: /tmp/config
+  XDG_DATA_HOME: /tmp/data
+
+services:
+  gateway:
+    image: traefik:v3.6
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --api.insecure=true
+    ports:
+      - "127.0.0.1:8080:80"
+      - "127.0.0.1:8081:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  auth:
+    <<: *php
+    volumes:
+      - ./services/auth:/app
+    environment:
+      <<: *php-env
+      DATABASE_URL: postgresql://newsroom:newsroom@postgres:5432/auth_db?serverVersion=17&charset=utf8
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.auth.rule=PathPrefix(`/api/auth`) || PathPrefix(`/api/users`)
+      - traefik.http.services.auth.loadbalancer.server.port=8000
+
+  editorial:
+    <<: *php
+    volumes:
+      - ./services/editorial:/app
+    environment:
+      <<: *php-env
+      DATABASE_URL: postgresql://newsroom:newsroom@postgres:5432/editorial_db?serverVersion=17&charset=utf8
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.editorial.rule=PathPrefix(`/api/articles`)
+      - traefik.http.services.editorial.loadbalancer.server.port=8000
+
+  notification:
+    <<: *php
+    volumes:
+      - ./services/notification:/app
+    environment:
+      <<: *php-env
+      DATABASE_URL: postgresql://newsroom:newsroom@postgres:5432/notification_db?serverVersion=17&charset=utf8
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.notification.rule=PathPrefix(`/api/notifications`)
+      - traefik.http.services.notification.loadbalancer.server.port=8000
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: newsroom
+      POSTGRES_PASSWORD: newsroom
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U newsroom"]
+      interval: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    ports:
+      - "127.0.0.1:15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "127.0.0.1:8025:8025"
+
+volumes:
+  postgres_data:
