@@ -17,6 +17,8 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column]
     private ?int $id = null;
 
+    public const ASSIGNABLE_ROLES = ['ROLE_AUTHOR', 'ROLE_EDITOR'];
+
     #[ORM\Column(length: 180)]
     private ?string $email = null;
 
@@ -103,7 +105,15 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     {
         $data = (array) $this;
         $data["\0" . self::class . "\0password"] = hash('crc32c', $this->password);
-        
+
         return $data;
+    }
+
+    public function addRole(string $role): static
+    {
+        if (!in_array($role, $this->roles, true)) {
+            $this->roles[] = $role;
+        }
+        return $this;
     }
 }
