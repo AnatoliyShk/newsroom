@@ -96,6 +96,16 @@ final class AuthApiTest extends WebTestCase
         self::assertContains('ROLE_EDITOR', $this->responseJson()['roles']);
     }
 
+    public function testTokenCarriesTheUserId(): void
+    {
+        $this->register();
+        $userId = $this->responseJson()['id'];
+
+        $tokenPayload = json_decode(base64_decode(strtr(explode('.', $this->login())[1], '-_', '+/')), true);
+
+        self::assertSame($userId, $tokenPayload['id']);
+    }
+
     private function register(array $overrides = []): void
     {
         $this->client->jsonRequest('POST', '/api/auth/register', [

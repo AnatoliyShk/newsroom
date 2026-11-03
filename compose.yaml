@@ -46,9 +46,12 @@ services:
     <<: *php
     volumes:
       - ./services/editorial:/app
+    secrets:
+      - jwt_public_key
     environment:
       <<: *php-env
       DATABASE_URL: postgresql://newsroom:newsroom@postgres:5432/editorial_db?serverVersion=17&charset=utf8
+      JWT_PUBLIC_KEY: /run/secrets/jwt_public_key
     labels:
       - traefik.enable=true
       - traefik.http.routers.editorial.rule=PathPrefix(`/api/articles`)
@@ -97,3 +100,6 @@ services:
 
 volumes:
   postgres_data:
+secrets:
+  jwt_public_key:
+    file: ./services/auth/config/jwt/public.pem
